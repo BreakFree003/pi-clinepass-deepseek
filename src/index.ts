@@ -29,10 +29,11 @@ const AGENT_DIR = join(homedir(), ".pi/agent");
 const STATUS_FILE = join(AGENT_DIR, "clinepass-status.json");
 const AUTH_FILE = join(AGENT_DIR, "auth.json");
 
-const MAX_HIGH_LOW = {
-  off: "none",
+/** dsh declares `reasoningEfforts: { high, max }` on both models — mirror that. */
+const HIGH_MAX = {
+  off: null,
   minimal: null,
-  low: "low",
+  low: null,
   medium: null,
   high: "high",
   xhigh: null,
@@ -50,7 +51,7 @@ const MODELS = [
     cost: zeroCost,
     contextWindow: 921_600,
     maxTokens: 131_072,
-    thinkingLevelMap: MAX_HIGH_LOW,
+    thinkingLevelMap: HIGH_MAX,
     // Same compat flags the old pi-clinepass catalog applied to every model
     // (official DeepSeek behavior: no developer role, Anthropic-style cache
     // markers, no long-retention cache) plus the in-history flag from
@@ -70,7 +71,7 @@ const MODELS = [
     cost: zeroCost,
     contextWindow: 921_600,
     maxTokens: 384_000,
-    thinkingLevelMap: MAX_HIGH_LOW,
+    thinkingLevelMap: HIGH_MAX,
     // Same compat flags the old pi-clinepass catalog applied to every model
     // (official DeepSeek behavior: no developer role, Anthropic-style cache
     // markers, no long-retention cache) plus the in-history flag from
@@ -128,6 +129,19 @@ function writeStatus(): void {
   }
 }
 
+/** Last verdict persisted by a previous run (for the footer before any request). */
+function savedVerdict(): { provider: string; anonymized: boolean } | null {
+  try {
+    const body = JSON.parse(readFileSync(STATUS_FILE, "utf8")) as Record<string, unknown>;
+    const last = isRecord(body.lastVerified) ? body.lastVerified : undefined;
+    const provider = stringValue(last?.provider);
+    if (!provider) return null;
+    return { provider, anonymized: last?.anonymized === true };
+  } catch {
+    return null;
+  }
+}
+
 /** Read the provider token pi stores for us: oauth access token or api_key. */
 function storedToken(): string | undefined {
   try {
@@ -142,6 +156,17 @@ function storedToken(): string | undefined {
 
 function activeToken(): string | undefined {
   return process.env.CLINE_PASS_API_KEY?.trim() || storedToken();
+}
+
+/** Compact "time until reset" — same shape as the dsh usage card's countdown. */
+function relativeReset(ms: number): string | null {
+  if (!Number.isFinite(ms) || ms <= 0) return null;
+  const minutes = Math.floor(ms / 60_000);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+  if (days > 0) return `${days}d ${hours % 24}h`;
+  if (hours > 0) return `${hours}h ${minutes % 60}m`;
+  return `${minutes}m`;
 }
 
 // ── observer ────────────────────────────────────────────────────────────────
@@ -200,11 +225,20 @@ export default function (pi: { registerProvider: (name: string, config: unknown)
     },
   });
 
+  pi.on("session_start", (...args: unknown[]) => {
+    const ctx = args[1] as { model?: { id?: string }; ui?: { setStatus?: (key: string, text: string | undefined) => void } } | undefined;
+    if (typeof ctx?.model?.id !== "string" || !ctx.model.id.startsWith("cline-pass/")) return;
+    const saved = savedVerdict();
+    ctx.ui?.setStatus?.("clinepass", saved ? `${saved.anonymized ? "⚠ " : ""}Provider: ${saved.provider}` : "Provider: --");
+  });
+
   pi.on("before_provider_request", (...args: unknown[]) => {
     const event = args[0] as { payload?: unknown };
     const payload = isRecord(event?.payload) ? event.payload : undefined;
     const model = stringValue(payload?.model);
     if (!model?.startsWith("cline-pass/")) return;
+    const ctx = args[1] as { ui?: { setStatus?: (key: string, text: string | undefined) => void } } | undefined;
+    ctx?.ui?.setStatus?.("clinepass", "Provider: --");
     pendingModel = model;
     sawRouting = false;
     lastResponseModel = undefined;
@@ -224,7 +258,7 @@ export default function (pi: { registerProvider: (name: string, config: unknown)
       lastUpstream = seen.provider;
       const anonymized = seen.provider === ANONYMIZED_CHANNEL;
       const label = seen.provider.length > 40 ? `${seen.provider.slice(0, 38)}…` : seen.provider;
-      ctx?.ui?.setStatus?.("clinepass", `Cline Pass · ${anonymized ? "⚠ " : ""}${label}`);
+      ctx?.ui?.setStatus?.("clinepass", `${anonymized ? "⚠ " : ""}Provider: ${label}`);
       // Same warning the dsh pill carries in its tooltip: one alert per process,
       // because every subsequent reply would repeat it.
       if (anonymized && !warnedAnonymized) {
@@ -257,7 +291,7 @@ export default function (pi: { registerProvider: (name: string, config: unknown)
       };
     } else {
       counters.unknown += 1;
-      if (ctx?.hasUI) ctx.ui?.setStatus?.("clinepass", "Cline Pass · ?");
+      if (ctx?.hasUI) ctx.ui?.setStatus?.("clinepass", "Provider: --");
     }
     writeStatus();
     return undefined;
@@ -269,7 +303,7 @@ export default function (pi: { registerProvider: (name: string, config: unknown)
       const lines: string[] = [];
       if ((args || "").trim() === "status") {
         lines.push(`observer: ${counters.verified}/${counters.seen} verified, ${counters.anonymized} anonymized, ${counters.unknown} unknown`);
-        lines.push(`last upstream: ${lastUpstream ?? "(none this process)"}`);
+        lines.push(`last upstream: ${lastUpstream ?? savedVerdict()?.provider ?? "(none)"}`);
         if (lastVerified) lines.push(`last: ${JSON.stringify(lastVerified)}`);
         lines.push(`status file: ${STATUS_FILE}`);
         ctx.ui.notify(lines.join("\n"), "info");
@@ -315,13 +349,15 @@ export default function (pi: { registerProvider: (name: string, config: unknown)
         const filled = Math.max(0, Math.min(10, Math.round(p / 10)));
         return `[${"█".repeat(filled)}${"░".repeat(10 - filled)}]`;
       };
-      lines.push(`Cline Pass — ${stringValue(planDetails?.displayName) ?? "plan"} (${status})`);
-      for (const [label, key] of [["5h ", "five_hour"], ["7d ", "weekly"], ["30d", "monthly"]] as const) {
-        const p = pct(key);
-        lines.push(`${label} ${bar(p)} ${String(p).padStart(3)}%`);
+      lines.push(`ClinePass remaining usage — ${stringValue(planDetails?.displayName) ?? "plan"} (${status})`);
+      for (const [label, key] of [["5-hour ", "five_hour"], ["Weekly ", "weekly"], ["Monthly", "monthly"]] as const) {
+        const left = 100 - pct(key);
+        const at = (byType.get(key) as any)?.resetsAt;
+        const reset = typeof at === "string" ? relativeReset(new Date(at).getTime() - Date.now()) : null;
+        lines.push(`${label} ${bar(left)} ${String(left).padStart(3)}% left${reset ? ` · resets in ${reset}` : ""}`);
       }
       if (plan?.currentPeriodEnd) lines.push(`period ends: ${String(plan.currentPeriodEnd)}`);
-      lines.push(`last upstream: ${lastUpstream ?? "(none this process)"}`);
+      lines.push(`last upstream: ${lastUpstream ?? savedVerdict()?.provider ?? "(none)"}`);
       ctx.ui.notify(lines.join("\n"), "info");
     },
   });

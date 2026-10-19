@@ -67,8 +67,14 @@ const src = readFileSync(join(PLUGIN_DIR, "src/index.ts"), "utf8");
 check("插件识别匿名渠道", src.includes("ANONYMIZED_CHANNEL") && src.includes("openai-compatible-private"));
 check("匿名渠道有 ⚠ 与一次性告警", src.includes("⚠") && src.includes("warnedAnonymized"));
 check("状态文件记录 anonymized 计数", src.includes("anonymized: 0") && src.includes("counters.anonymized"));
+check("footer 用 dsh 胶囊的文案", src.includes('"Provider: --"') && src.includes("Provider: ${label}"));
+check("启动时显示上次结论", src.includes("session_start") && src.includes("savedVerdict"));
+check("用量显示剩余百分比与重置倒计时", src.includes("remaining usage") && src.includes("% left") && src.includes("resets in"));
+check("思考档与 dsh 一致（仅 high/max）", src.includes("HIGH_MAX") && !src.includes("MAX_HIGH_LOW"));
+const map = overrides[ID]?.thinkingLevelMap ?? {};
+check("models.json 思考档 low 已隐藏", map.low === null && map.high === "high" && map.max === "max", JSON.stringify(map));
 const pkgVersion = JSON.parse(readFileSync(join(PLUGIN_DIR, "package.json"), "utf8")).version;
-check("插件版本已递增（0.1.4）", pkgVersion === "0.1.4", pkgVersion);
+check("插件版本已递增（0.1.5）", pkgVersion === "0.1.5", pkgVersion);
 
 console.log(failed === 0 ? "\nRESULT: PI CLINEPASS OK" : `\nRESULT: FAILED (${failed})`);
 process.exit(failed === 0 ? 0 : 1);

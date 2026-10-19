@@ -8,9 +8,10 @@ the billing/price-tracking machinery:
   - `cline-pass/deepseek-v4.1-flash-1017` (dated snapshot)
 - **observes** the real upstream provider of every cline-pass request (`provider_stream_event` →
   `provider_metadata.gateway.routing.finalProvider`, OpenRouter `provider`, or
-  `provider_metadata.deepseek.systemFingerprint`) and shows it in the footer
-  (`Cline Pass · deepseek`). An anonymized channel (`openai-compatible-private`, contributor tier)
-  gets a `⚠` prefix plus a one-shot warning — the same signal as the dsh pill's warn icon/tooltip;
+  `provider_metadata.deepseek.systemFingerprint`) and shows it in the footer using the dsh pill's
+  wording: `Provider: deepseek`, `Provider: --` while awaiting a reply, and the last saved verdict on
+  session start. An anonymized channel (`openai-compatible-private`, contributor tier) gets a `⚠`
+  prefix plus a one-shot warning — the same signal as the dsh pill's warn icon/tooltip;
 - writes counters + last verdict to `~/.pi/agent/clinepass-status.json`;
 - `/clinepass` reports plan usage (5h / weekly / monthly) from Cline's billing API;
 - **never rewrites a request.** Pinning stays in your own config: `models.json` `samplingParams`
@@ -39,7 +40,7 @@ token there).
 
 | Command | What it shows |
 | --- | --- |
-| `/clinepass` | plan name/status, 5h / 7d / 30d usage bars, period end, last upstream |
+| `/clinepass` | plan name/status, 5-hour / Weekly / Monthly bars as **% left** (dsh card wording), period end, last upstream |
 | `/clinepass status` | observer counters (`verified/seen`, `unknown`), last verdict, status-file path |
 
 ## Files
