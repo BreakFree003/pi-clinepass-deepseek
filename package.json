@@ -1,0 +1,22 @@
+{
+  "name": "pi-clinepass-dsh",
+  "version": "0.1.4",
+  "description": "Cline Pass provider + upstream observer + plan-usage report for pi, mirroring dsh-clinepass",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "license": "MIT",
+  "pi": {
+    "extensions": [
+      "./src/index.ts"
+    ]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-ai": "*"
+  }
+}
