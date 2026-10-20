@@ -1,7 +1,7 @@
 # pi-clinepass-deepseek
 
 Cline Pass for [pi](https://pi.dev), mirroring what
-[dsh-clinepass](https://github.com/BreakFree003/dsh-clinepass-deepseekv4.1) does in DeepSeek
+[dsh-clinepass](https://github.com/BreakFree003/dsh-clinepass-deepseek) does in DeepSeek
 Harness — minus the billing/price-tracking machinery:
 
 - registers the `clinepass` OpenAI-compatible provider with **two** models:
@@ -111,12 +111,12 @@ gateway decides where it lands.
 ## Sync
 
 This is a behavior mirror of
-[dsh-clinepass](https://github.com/BreakFree003/dsh-clinepass-deepseekv4.1). Whenever that plugin
+[dsh-clinepass](https://github.com/BreakFree003/dsh-clinepass-deepseek). Whenever that plugin
 ships a version (tag + release), port the same behavior here, bump this package's patch version, and
 update the marker above. When a pi-side change lands first, mirror it back to dsh and release there
 before bumping the marker.
 
-The checklist is [RELEASING.md §7](https://github.com/BreakFree003/dsh-clinepass-deepseekv4.1/blob/main/RELEASING.md)
+The checklist is [RELEASING.md §7](https://github.com/BreakFree003/dsh-clinepass-deepseek/blob/main/RELEASING.md)
 on the dsh side. After every sync: `node check.mjs` green, plus one live request per model.
 
 ## Difference from the old pi-clinepass
