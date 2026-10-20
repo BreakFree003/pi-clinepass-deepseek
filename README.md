@@ -26,7 +26,7 @@ version, the other ports the same behavior and updates its marker (see [Sync](#s
 pi install git:github.com/BreakFree003/pi-clinepass-dsh
 
 # pin a release instead of tracking main:
-pi install git:github.com/BreakFree003/pi-clinepass-dsh@v0.1.7
+pi install git:github.com/BreakFree003/pi-clinepass-dsh@v0.1.8
 
 # from a local clone, for development:
 pi install .
@@ -39,8 +39,8 @@ credential, so the two models only appear in `pi --list-models` / the model pick
 
 One of:
 
-- `CLINE_PASS_API_KEY` in the environment, or
-- `/login` → **Cline Pass** → paste the API key.
+- `CLINE_PASS_API_KEY` in the environment — works without a stored credential, or
+- `/login` → **Cline Pass** → pick either method → paste the API key.
 
 Either way pi stores it as the provider credential (`~/.pi/agent/auth.json` → `clinepass`). An
 existing Cline Pass login from the old `pi-clinepass` package is reused as-is (both store the access

@@ -312,6 +312,8 @@ export default function (pi: { registerProvider: (name: string, config: unknown)
   pi.registerProvider(PROVIDER, {
     name: "Cline Pass",
     baseUrl: API_BASE,
+    // Env-only auth (CI / headless). A stored /login credential still wins.
+    apiKey: "$CLINE_PASS_API_KEY",
     api: "openai-completions",
     authHeader: true,
     models: MODELS,
