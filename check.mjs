@@ -65,7 +65,7 @@ if (!hasCredential) {
   } catch (error) {
     check(`${PI} --list-models runs`, false, String(error.message).slice(0, 120));
   }
-  for (const [id, maxOut] of [[ALIAS, /(131K|384K)/], [ID, /384K/]]) {
+  for (const [id, maxOut] of [[ALIAS, /(131(?:\.\d+)?K|384K)/], [ID, /384K/]]) {
     const row = listed.split("\n").find((line) => line.includes(id));
     check(`pi lists ${id.split("/").pop()}`, row !== undefined, row?.trim());
     if (row) {
