@@ -26,7 +26,7 @@ version, the other ports the same behavior and updates its marker (see [Sync](#s
 pi install git:github.com/BreakFree003/pi-clinepass-dsh
 
 # pin a release instead of tracking main:
-pi install git:github.com/BreakFree003/pi-clinepass-dsh@v0.1.6
+pi install git:github.com/BreakFree003/pi-clinepass-dsh@v0.1.7
 
 # from a local clone, for development:
 pi install .
