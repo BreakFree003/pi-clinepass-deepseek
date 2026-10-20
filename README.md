@@ -32,11 +32,8 @@ pi install git:github.com/BreakFree003/pi-clinepass-dsh@v0.1.6
 pi install .
 ```
 
-Restart pi if it was already running, then check that both models appear:
-
-```sh
-pi --list-models | grep clinepass
-```
+Restart pi if it was already running. Then log in (see [Auth](#auth)): pi hides providers without a
+credential, so the two models only appear in `pi --list-models` / the model picker after that.
 
 ## Auth
 
@@ -51,6 +48,8 @@ token there).
 
 The credential is a static Cline API key: the extension gives it a 10-year expiry and `refreshToken`
 cannot mint a new one. If it ever expires, run `/login` again.
+
+After login, `pi --list-models | grep clinepass` should list both models.
 
 ## Models
 
