@@ -1,15 +1,36 @@
 {
   "name": "pi-clinepass-dsh",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "Cline Pass provider + upstream observer + plan-usage report for pi, mirroring dsh-clinepass",
   "type": "module",
   "main": "src/index.ts",
   "types": "src/index.ts",
   "files": [
     "src",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "license": "MIT",
+  "author": "BreakFree003",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/BreakFree003/pi-clinepass-dsh.git"
+  },
+  "homepage": "https://github.com/BreakFree003/pi-clinepass-dsh#readme",
+  "bugs": {
+    "url": "https://github.com/BreakFree003/pi-clinepass-dsh/issues"
+  },
+  "keywords": [
+    "pi-package",
+    "pi-extension",
+    "cline-pass",
+    "cline",
+    "deepseek",
+    "provider"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
   "pi": {
     "extensions": [
       "./src/index.ts"

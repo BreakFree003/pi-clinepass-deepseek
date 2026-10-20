@@ -1,11 +1,13 @@
 #!/usr/bin/env node
 /**
- * 核对 pi 侧的 Cline Pass 配置：新插件是否装上、模型是否钉对、默认模型是否正确。
+ * Optional post-install smoke check for pi-clinepass-dsh.
  *
- * 跑法：node ~/Documents/Projects/pi-clinepass-dsh/check.mjs
+ * Usage: node check.mjs
  *
- * 只读。旧 pi-clinepass 已卸载，模型现在由本地插件
- * ~/Documents/Projects/pi-clinepass-dsh 提供。
+ * Read-only. Verifies that the package is referenced by pi's settings, that
+ * both models are visible to `pi --list-models`, that an optional 1017
+ * models.json pin still targets DeepSeek, and that the observer markers are
+ * present in the installed source. Exits non-zero on failure.
  */
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
@@ -13,68 +15,93 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const AGENT = join(homedir(), ".pi/agent");
+const AGENT = process.env.PI_AGENT_DIR ?? join(homedir(), ".pi/agent");
 const PLUGIN_DIR = dirname(fileURLToPath(import.meta.url));
+const PI = process.env.PI_BIN ?? "pi";
 const ID = "cline-pass/deepseek-v4.1-flash-1017";
 const ALIAS = "cline-pass/deepseek-v4.1-flash";
 
 let failed = 0;
+let skipped = 0;
 function check(name, ok, detail = "") {
   console.log(`  ${ok ? "ok  " : "FAIL"} ${name}${detail ? ` — ${detail}` : ""}`);
   if (!ok) failed += 1;
 }
+function note(name, detail = "") {
+  skipped += 1;
+  console.log(`  skip ${name}${detail ? ` — ${detail}` : ""}`);
+}
+function readJson(path) {
+  try {
+    return JSON.parse(readFileSync(path, "utf8"));
+  } catch {
+    return undefined;
+  }
+}
 
-// 1. 旧包已卸载、新插件在位
-const settings = JSON.parse(readFileSync(join(AGENT, "settings.json"), "utf8"));
-const packages = (settings.packages ?? []).map(String);
-check("settings.json 不再含 npm:pi-clinepass", !packages.some((p) => p.includes("pi-clinepass") && p.startsWith("npm:")));
-check("settings.json 已挂本地插件", packages.some((p) => p.includes("pi-clinepass-dsh")), packages.find((p) => p.includes("pi-clinepass-dsh")));
-check("插件目录存在", existsSync(join(PLUGIN_DIR, "src/index.ts")), PLUGIN_DIR);
+// 1. pi settings reference this package (git, npm or a local path all work).
+const settings = readJson(join(AGENT, "settings.json"));
+check("settings.json is readable", settings !== undefined, join(AGENT, "settings.json"));
+const packages = (settings?.packages ?? []).map(String);
+const installed = packages.find((entry) => entry.includes("pi-clinepass-dsh") || entry === PLUGIN_DIR);
+check("settings.json references pi-clinepass-dsh", installed !== undefined, installed);
+check("extension source is present", existsSync(join(PLUGIN_DIR, "src/index.ts")), PLUGIN_DIR);
 
-// 2. models.json
-const models = JSON.parse(readFileSync(join(AGENT, "models.json"), "utf8"));
-const overrides = models?.providers?.clinepass?.modelOverrides ?? {};
-const entry = overrides[ID];
-const only = entry?.samplingParams?.providerOptions?.gateway?.only;
-check("models.json: 1017 钉了 deepseek", JSON.stringify(only) === JSON.stringify(["deepseek"]), JSON.stringify(only));
-check("models.json: 1017 maxTokens = 384000", entry?.maxTokens === 384000, String(entry?.maxTokens));
-check("models.json: 别名没有无效 pin", overrides[ALIAS]?.samplingParams === undefined);
-check("models.json: 两模型都开 mid-convo system",
-  overrides[ALIAS]?.compat?.supportsMidConvoSystemMessages === true &&
-  entry?.compat?.supportsMidConvoSystemMessages === true);
-
-// 3. settings.json 默认模型
-check("settings.json: 默认模型是 1017", settings.defaultModel === ID, settings.defaultModel);
-check("settings.json: 1017 默认思考档 high",
-  settings.modelThinkingLevels?.[`clinepass/${ID}`] === "high",
-  settings.modelThinkingLevels?.[`clinepass/${ID}`]);
-
-// 4. pi 实际列出的模型
+// 2. pi actually lists both models.
 let listed = "";
 try {
-  listed = execFileSync("pi", ["--list-models"], { encoding: "utf8" });
+  listed = execFileSync(PI, ["--list-models"], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+  check(`${PI} --list-models runs`, true);
 } catch (error) {
-  check("pi --list-models 可运行", false, String(error.message).slice(0, 80));
+  check(`${PI} --list-models runs`, false, String(error.message).slice(0, 120));
 }
-for (const id of [ALIAS, ID]) {
+for (const [id, maxOut] of [[ALIAS, /(131K|384K)/], [ID, /384K/]]) {
   const row = listed.split("\n").find((line) => line.includes(id));
-  check(`pi --list-models 列出 ${id.split("/").pop()}`, row !== undefined, row?.trim());
-  check("…且 max-out 是 384K", /384K/.test(row ?? ""), row?.trim());
+  check(`pi lists ${id.split("/").pop()}`, row !== undefined, row?.trim());
+  if (row) {
+    check(`  …with 921.6K context`, /921\.6K/.test(row), row.trim());
+    check(`  …with a known max-out`, maxOut.test(row), row.trim());
+  }
 }
 
-// 5. footer 告警与匿名渠道处理（与 dsh 胶囊的 warn 图标/tooltip 对齐）
-const src = readFileSync(join(PLUGIN_DIR, "src/index.ts"), "utf8");
-check("插件识别匿名渠道", src.includes("ANONYMIZED_CHANNEL") && src.includes("openai-compatible-private"));
-check("匿名渠道有 ⚠ 与一次性告警", src.includes("⚠") && src.includes("warnedAnonymized"));
-check("状态文件记录 anonymized 计数", src.includes("anonymized: 0") && src.includes("counters.anonymized"));
-check("footer 用 dsh 胶囊的文案", src.includes('"Provider: --"') && src.includes("Provider: ${label}"));
-check("启动时显示上次结论", src.includes("session_start") && src.includes("savedVerdict"));
-check("用量显示剩余百分比与重置倒计时", src.includes("remaining usage") && src.includes("% left") && src.includes("resets in"));
-check("思考档与 dsh 一致（仅 high/max）", src.includes("HIGH_MAX") && !src.includes("MAX_HIGH_LOW"));
-const map = overrides[ID]?.thinkingLevelMap ?? {};
-check("models.json 思考档 low 已隐藏", map.low === null && map.high === "high" && map.max === "max", JSON.stringify(map));
-const pkgVersion = JSON.parse(readFileSync(join(PLUGIN_DIR, "package.json"), "utf8")).version;
-check("插件版本已递增（0.1.5）", pkgVersion === "0.1.5", pkgVersion);
+// 3. Optional user config: a 1017 pin must still target deepseek, and the
+//    stable alias should not carry a pin at all.
+const models = readJson(join(AGENT, "models.json"));
+const overrides = models?.providers?.clinepass?.modelOverrides;
+if (overrides === undefined) {
+  note("models.json clinepass overrides (none configured)");
+} else {
+  const only = overrides?.[ID]?.samplingParams?.providerOptions?.gateway?.only;
+  if (only === undefined) note("1017 sampling pin (none configured)");
+  else check("1017 sampling pin targets deepseek", Array.isArray(only) && only.length === 1 && only[0] === "deepseek", JSON.stringify(only));
+  const aliasPin = overrides?.[ALIAS]?.samplingParams;
+  if (aliasPin === undefined) check("stable alias has no sampling pin", true);
+  else note("stable alias has a sampling pin (the gateway ignores it on that route)", JSON.stringify(aliasPin));
+  const maxTokens = overrides?.[ID]?.maxTokens;
+  if (maxTokens !== undefined) check("1017 maxTokens is a positive number", Number.isInteger(maxTokens) && maxTokens > 0, String(maxTokens));
+}
 
-console.log(failed === 0 ? "\nRESULT: PI CLINEPASS OK" : `\nRESULT: FAILED (${failed})`);
+// 4. Marker checks against the installed source (no version pin — the manifest
+//    is the only version source, so this survives every release).
+const source = existsSync(join(PLUGIN_DIR, "src/index.ts")) ? readFileSync(join(PLUGIN_DIR, "src/index.ts"), "utf8") : "";
+check("observer recognizes the anonymous channel", source.includes("ANONYMIZED_CHANNEL") && source.includes("openai-compatible-private"));
+check("anonymous channel warns once", source.includes("⚠") && source.includes("warnedAnonymized"));
+check("footer uses the dsh wording", source.includes('"Provider: --"') && source.includes("Provider: ${label}"));
+check("session start restores the saved verdict", source.includes("session_start") && source.includes("savedVerdict"));
+check("usage renders % left and reset countdown", source.includes("% left") && source.includes("resets in"));
+check("thinking levels are high/max only", source.includes("HIGH_MAX") && !source.includes("MAX_HIGH_LOW"));
+
+const manifest = readJson(join(PLUGIN_DIR, "package.json"));
+check("package version is semver", typeof manifest?.version === "string" && /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(manifest.version), manifest?.version);
+
+// 5. The status file, if this pi install has produced one already.
+const status = readJson(join(AGENT, "clinepass-status.json"));
+if (status === undefined) note("status file (no request observed yet)");
+else {
+  check("status file hook is installed", status.hook === "installed", String(status.hook));
+  check("status file has counters", typeof status.counters?.seen === "number", JSON.stringify(status.counters));
+  check("status file has no credential", !JSON.stringify(status).includes("apiKey") && !JSON.stringify(status).includes("Bearer"));
+}
+
+console.log(failed === 0 ? `\nRESULT: PI CLINEPASS OK${skipped ? ` (${skipped} skipped)` : ""}` : `\nRESULT: FAILED (${failed})`);
 process.exit(failed === 0 ? 0 : 1);
