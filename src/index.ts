@@ -1,5 +1,5 @@
 /**
- * pi-clinepass-dsh — Cline Pass for pi, same job as dsh-clinepass:
+ * pi-clinepass-deepseek — Cline Pass for pi, same job as dsh-clinepass:
  *
  *   1. registers the `clinepass` OpenAI-compatible provider with the two
  *      DeepSeek V4.1 Flash routes (stable alias + dated 1017 snapshot);

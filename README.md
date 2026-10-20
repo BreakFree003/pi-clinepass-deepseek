@@ -1,4 +1,4 @@
-# pi-clinepass-dsh
+# pi-clinepass-deepseek
 
 Cline Pass for [pi](https://pi.dev), mirroring what
 [dsh-clinepass](https://github.com/BreakFree003/dsh-clinepass-deepseekv4.1) does in DeepSeek
@@ -17,18 +17,20 @@ Harness — minus the billing/price-tracking machinery:
 - **never rewrites a request.** Pinning stays in your own config (see
   [Pinning the 1017 snapshot](#pinning-the-1017-snapshot)).
 
-**Synced with dsh-clinepass v0.12.6.** The two repos are behavior mirrors: whenever one side ships a
-version, the other ports the same behavior and updates its marker (see [Sync](#sync)). One deliberate
-difference: both models here declare 384,000 max output, while dsh-clinepass keeps the stable alias
-at 131,072.
+**Synced with dsh-clinepass v0.12.7.** The two repos are behavior mirrors: whenever one side ships a
+version, the other ports the same behavior and updates its marker (see [Sync](#sync)). Both models
+here and in dsh-clinepass now declare 384,000 max output.
+
+> Renamed from `pi-clinepass-dsh`; old GitHub URLs redirect. Package name is now
+> `pi-clinepass-deepseek`.
 
 ## Install
 
 ```sh
-pi install git:github.com/BreakFree003/pi-clinepass-dsh
+pi install git:github.com/BreakFree003/pi-clinepass-deepseek
 
 # pin a release instead of tracking main:
-pi install git:github.com/BreakFree003/pi-clinepass-dsh@v0.1.10
+pi install git:github.com/BreakFree003/pi-clinepass-deepseek@v0.1.11
 
 # from a local clone, for development:
 pi install .

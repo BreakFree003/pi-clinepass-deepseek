@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Optional post-install smoke check for pi-clinepass-dsh.
+ * Optional post-install smoke check for pi-clinepass-deepseek.
  *
  * Usage: node check.mjs
  *
@@ -43,8 +43,12 @@ function readJson(path) {
 const settings = readJson(join(AGENT, "settings.json"));
 check("settings.json is readable", settings !== undefined, join(AGENT, "settings.json"));
 const packages = (settings?.packages ?? []).map(String);
-const installed = packages.find((entry) => entry.includes("pi-clinepass-dsh") || entry === PLUGIN_DIR);
-check("settings.json references pi-clinepass-dsh", installed !== undefined, installed);
+const installed = packages.find((entry) =>
+  entry.includes("pi-clinepass-deepseek") ||
+  entry.includes("pi-clinepass-dsh") || // old name; GitHub redirects, keep working
+  entry === PLUGIN_DIR,
+);
+check("settings.json references pi-clinepass-deepseek", installed !== undefined, installed);
 check("extension source is present", existsSync(join(PLUGIN_DIR, "src/index.ts")), PLUGIN_DIR);
 
 // 2. pi actually lists both models — only meaningful once a credential exists,

@@ -1,6 +1,6 @@
 {
-  "name": "pi-clinepass-dsh",
-  "version": "0.1.10",
+  "name": "pi-clinepass-deepseek",
+  "version": "0.1.11",
   "description": "Cline Pass provider + upstream observer + plan-usage report for pi, mirroring dsh-clinepass",
   "type": "module",
   "main": "src/index.ts",
@@ -14,11 +14,11 @@
   "author": "BreakFree003",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/BreakFree003/pi-clinepass-dsh.git"
+    "url": "git+https://github.com/BreakFree003/pi-clinepass-deepseek.git"
   },
-  "homepage": "https://github.com/BreakFree003/pi-clinepass-dsh#readme",
+  "homepage": "https://github.com/BreakFree003/pi-clinepass-deepseek#readme",
   "bugs": {
-    "url": "https://github.com/BreakFree003/pi-clinepass-dsh/issues"
+    "url": "https://github.com/BreakFree003/pi-clinepass-deepseek/issues"
   },
   "keywords": [
     "pi-package",
