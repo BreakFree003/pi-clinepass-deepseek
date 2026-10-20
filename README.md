@@ -18,7 +18,9 @@ Harness — minus the billing/price-tracking machinery:
   [Pinning the 1017 snapshot](#pinning-the-1017-snapshot)).
 
 **Synced with dsh-clinepass v0.12.6.** The two repos are behavior mirrors: whenever one side ships a
-version, the other ports the same behavior and updates its marker (see [Sync](#sync)).
+version, the other ports the same behavior and updates its marker (see [Sync](#sync)). One deliberate
+difference: both models here declare 384,000 max output, while dsh-clinepass keeps the stable alias
+at 131,072.
 
 ## Install
 
@@ -26,7 +28,7 @@ version, the other ports the same behavior and updates its marker (see [Sync](#s
 pi install git:github.com/BreakFree003/pi-clinepass-dsh
 
 # pin a release instead of tracking main:
-pi install git:github.com/BreakFree003/pi-clinepass-dsh@v0.1.9
+pi install git:github.com/BreakFree003/pi-clinepass-dsh@v0.1.10
 
 # from a local clone, for development:
 pi install .
@@ -55,12 +57,13 @@ After login, `pi --list-models | grep clinepass` should list both models.
 
 | Model id | Context | Max output | Thinking |
 | --- | --- | --- | --- |
-| `cline-pass/deepseek-v4.1-flash` | 921,600 | 131,072 | `high` / `max` |
+| `cline-pass/deepseek-v4.1-flash` | 921,600 | 384,000 | `high` / `max` |
 | `cline-pass/deepseek-v4.1-flash-1017` | 921,600 | 384,000 | `high` / `max` |
 
-Costs are declared as zero: Cline Pass is a subscription, not per-token billing. The stable alias
-declares 131,072 max output to match dsh-clinepass; raise it in `models.json` if your gateway allows
-more.
+Costs are declared as zero: Cline Pass is a subscription, not per-token billing. Both models declare
+384,000 max output. This is a client-side budget, not a gateway limit: the Cline gateway does not
+validate `max_tokens` (dsh-clinepass tested 200K/400K and got 200s), so it does not make the model
+generate longer replies — it only stops pi from cutting a long one off.
 
 ## Commands
 

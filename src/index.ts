@@ -51,7 +51,7 @@ const MODELS = [
     input: ["text", "image"] as ("text" | "image")[],
     cost: zeroCost,
     contextWindow: 921_600,
-    maxTokens: 131_072,
+    maxTokens: 384_000,
     thinkingLevelMap: HIGH_MAX,
     // Same compat flags the old pi-clinepass catalog applied to every model
     // (official DeepSeek behavior: no developer role, Anthropic-style cache

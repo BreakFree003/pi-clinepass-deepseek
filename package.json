@@ -1,6 +1,6 @@
 {
   "name": "pi-clinepass-dsh",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "description": "Cline Pass provider + upstream observer + plan-usage report for pi, mirroring dsh-clinepass",
   "type": "module",
   "main": "src/index.ts",
