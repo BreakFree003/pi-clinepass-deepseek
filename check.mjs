@@ -47,20 +47,31 @@ const installed = packages.find((entry) => entry.includes("pi-clinepass-dsh") ||
 check("settings.json references pi-clinepass-dsh", installed !== undefined, installed);
 check("extension source is present", existsSync(join(PLUGIN_DIR, "src/index.ts")), PLUGIN_DIR);
 
-// 2. pi actually lists both models.
-let listed = "";
-try {
-  listed = execFileSync(PI, ["--list-models"], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
-  check(`${PI} --list-models runs`, true);
-} catch (error) {
-  check(`${PI} --list-models runs`, false, String(error.message).slice(0, 120));
-}
-for (const [id, maxOut] of [[ALIAS, /(131K|384K)/], [ID, /384K/]]) {
-  const row = listed.split("\n").find((line) => line.includes(id));
-  check(`pi lists ${id.split("/").pop()}`, row !== undefined, row?.trim());
-  if (row) {
-    check(`  …with 921.6K context`, /921\.6K/.test(row), row.trim());
-    check(`  …with a known max-out`, maxOut.test(row), row.trim());
+// 2. pi actually lists both models — only meaningful once a credential exists,
+//    because pi hides providers without one.
+const auth = readJson(join(AGENT, "auth.json"));
+const credential = auth?.clinepass;
+const hasCredential = Boolean(
+  process.env.CLINE_PASS_API_KEY?.trim() ||
+  (typeof credential === "object" && credential !== null && (credential.access || credential.key)),
+);
+if (!hasCredential) {
+  note("model listing (no clinepass credential yet — run /login, then rerun)");
+} else {
+  let listed = "";
+  try {
+    listed = execFileSync(PI, ["--list-models"], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+    check(`${PI} --list-models runs`, true);
+  } catch (error) {
+    check(`${PI} --list-models runs`, false, String(error.message).slice(0, 120));
+  }
+  for (const [id, maxOut] of [[ALIAS, /(131K|384K)/], [ID, /384K/]]) {
+    const row = listed.split("\n").find((line) => line.includes(id));
+    check(`pi lists ${id.split("/").pop()}`, row !== undefined, row?.trim());
+    if (row) {
+      check(`  …with 921.6K context`, /921\.6K/.test(row), row.trim());
+      check(`  …with a known max-out`, maxOut.test(row), row.trim());
+    }
   }
 }
 

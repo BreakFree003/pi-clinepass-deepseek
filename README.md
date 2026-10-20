@@ -130,7 +130,8 @@ An optional, read-only smoke check for an installed copy: it verifies that `sett
 this package, that both models are listed by `pi --list-models` with the expected context, that the
 1017 override (if you set one) still pins `deepseek`, and that the observer markers are present in
 the installed source. It reads your `~/.pi/agent` config and never changes it; `pi` must be on
-`PATH`. There is no automated test suite beyond this check.
+`PATH`. Model-list checks are skipped until a clinepass credential exists, so run it again after
+`/login`. There is no automated test suite beyond this check.
 
 ## Security and limits
 
