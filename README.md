@@ -13,12 +13,17 @@ Harness — minus the billing/price-tracking machinery:
   warn icon/tooltip;
 - writes counters + the last verdict to `~/.pi/agent/clinepass-status.json`;
 - `/clinepass` reports plan usage (5h / weekly / monthly) from Cline's billing API;
-- **never rewrites a request.** The gateway ignores client-side pinning on `cline-pass/*` since
-  2026-10-22 (dsh-clinepass 0.13.0 dropped its gate patch), so there is nothing to configure.
+- **never rewrites a request.** Pinning is declared on the model in pi-ai's
+  `compat.vercelGatewayRouting.only` (`[deepseek]`), which pi-ai 1.3.0 turns into
+  `providerOptions.gateway.only` — no gate patch needed on this side. The gateway honours `only`
+  for the 1017 snapshot again as of 2026-10-23; without it the weighted tier-0 pick can hand the
+  request to fireworks. The stable alias and the rest of `cline-pass/*` are still re-pointed to a
+  VMC contributor route.
 
-**Synced with dsh-clinepass v0.14.0.** The two repos are behavior mirrors: whenever one side ships a
-version, the other ports the same behavior and updates its marker (see [Sync](#sync)). The model
-here and in dsh-clinepass now declares 384,000 max output.
+**Synced with dsh-clinepass v0.15.0.** The two repos are behavior mirrors: whenever one side ships a
+version, the other ports the same behavior and updates its marker (see [Sync](#sync)). Both sides
+now pin the first-party upstream on the 1017 snapshot (`only: [deepseek]`); dsh needs its boot-time
+gate patch for that, pi does not. The model here and in dsh-clinepass declares 384,000 max output.
 
 > Renamed from `pi-clinepass-dsh`; old GitHub URLs redirect. Package name is now
 > `pi-clinepass-deepseek`.
@@ -29,7 +34,7 @@ here and in dsh-clinepass now declares 384,000 max output.
 pi install git:github.com/BreakFree003/pi-clinepass-deepseek
 
 # pin a release instead of tracking main:
-pi install git:github.com/BreakFree003/pi-clinepass-deepseek@v0.1.13
+pi install git:github.com/BreakFree003/pi-clinepass-deepseek@v0.1.14
 
 # from a local clone, for development:
 pi install .
@@ -61,7 +66,7 @@ After login, `pi --list-models | grep clinepass` should list the model.
 | `cline-pass/deepseek-v4.1-flash-1017` | 921,600 | 384,000 | `high` / `max` |
 
 The id ends in `-1017` because it is Cline's dated snapshot (the one the gateway historically let you
-pin); the display name is `DeepSeek V4.1 Flash`, matching dsh-clinepass 0.14.0. Costs are declared as
+pin); the display name is `DeepSeek V4.1 Flash`, matching dsh-clinepass 0.15.0. Costs are declared as
 zero: Cline Pass is a subscription, not per-token billing. The model declares
 384,000 max output. This is a client-side budget, not a gateway limit: the Cline gateway does not
 validate `max_tokens` (dsh-clinepass tested 200K/400K and got 200s), so it does not make the model

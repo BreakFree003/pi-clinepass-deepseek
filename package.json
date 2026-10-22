@@ -1,6 +1,6 @@
 {
   "name": "pi-clinepass-deepseek",
-  "version": "0.1.13",
+  "version": "0.1.14",
   "description": "Cline Pass provider + upstream observer + plan-usage report for pi, mirroring dsh-clinepass",
   "type": "module",
   "main": "src/index.ts",

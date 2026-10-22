@@ -11,9 +11,12 @@
  *   3. `/clinepass` reports plan usage (5h / weekly / monthly) from Cline's
  *      billing API, using the token pi already stores for this provider.
  *
- * It never rewrites a request. The gateway has ignored every client-side pinning
- * field for `cline-pass/*` since 2026-10-22 (dsh-clinepass 0.13.0 dropped its gate
- * patch too), so this package ships no pin.
+ * It never rewrites a request. Pinning is declared on the model, in pi-ai's
+ * `compat.vercelGatewayRouting.only` (pi-ai 1.3.0 passes it through as
+ * `providerOptions.gateway.only`; no gate patch needed, unlike dsh). As of
+ * 2026-10-23 the 1017 snapshot honours `only` again, so the model pins
+ * `[deepseek]`; the stable alias and the rest of `cline-pass/*` are still
+ * re-pointed to a VMC contributor route by the gateway.
  *
  * Auth: `/login` → Cline Pass accepts either the `CLINE_PASS_API_KEY`
  * environment variable or a pasted API key; both are stored by pi as the
@@ -63,6 +66,10 @@ const MODELS = [
       cacheControlFormat: "anthropic" as const,
       supportsLongCacheRetention: false,
       supportsMidConvoSystemMessages: true,
+      // dsh-clinepass 0.15.0: pin the first-party upstream. The gateway executes
+      // `only` for the 1017 snapshot again (2026-10-23); without it the
+      // weighted tier-0 pick can hand the request to fireworks.
+      vercelGatewayRouting: { only: ["deepseek"] },
     },
   },
 ];

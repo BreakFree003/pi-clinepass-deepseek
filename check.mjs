@@ -77,7 +77,7 @@ if (!hasCredential) {
   }
 }
 
-// 3. No stale override for the retired alias (dsh-clinepass 0.14.0), and the
+// 3. No stale override for the retired alias (dsh-clinepass 0.15.0), and the
 //    kept snapshot id should not carry a pin the gateway ignores anyway.
 const models = readJson(join(AGENT, "models.json"));
 const overrides = models?.providers?.clinepass?.modelOverrides;
