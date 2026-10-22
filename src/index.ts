@@ -1,8 +1,8 @@
 /**
  * pi-clinepass-deepseek — Cline Pass for pi, same job as dsh-clinepass:
  *
- *   1. registers the `clinepass` OpenAI-compatible provider with the two
- *      DeepSeek V4.1 Flash routes (stable alias + dated 1017 snapshot);
+ *   1. registers the `clinepass` OpenAI-compatible provider with the
+ *      `cline-pass/deepseek-v4.1-flash` route;
  *   2. observes which upstream provider actually answered each request, using
  *      dsh's evidence priority (gateway routing → top-level `provider` →
  *      provider_metadata namespace → DeepSeek fingerprint), and shows it in
@@ -11,8 +11,9 @@
  *   3. `/clinepass` reports plan usage (5h / weekly / monthly) from Cline's
  *      billing API, using the token pi already stores for this provider.
  *
- * It never rewrites a request: request-side pinning stays in your own
- * config (`models.json` `samplingParams` for the 1017 snapshot).
+ * It never rewrites a request. The gateway has ignored every client-side pinning
+ * field for `cline-pass/*` since 2026-10-22 (dsh-clinepass 0.13.0 dropped its gate
+ * patch too), so this package ships no pin.
  *
  * Auth: `/login` → Cline Pass accepts either the `CLINE_PASS_API_KEY`
  * environment variable or a pasted API key; both are stored by pi as the
@@ -30,7 +31,7 @@ const AGENT_DIR = join(homedir(), ".pi/agent");
 const STATUS_FILE = join(AGENT_DIR, "clinepass-status.json");
 const AUTH_FILE = join(AGENT_DIR, "auth.json");
 
-/** dsh declares `reasoningEfforts: { high, max }` on both models — mirror that. */
+/** dsh declares `reasoningEfforts: { high, max }` on the model — mirror that. */
 const HIGH_MAX = {
   off: null,
   minimal: null,
@@ -56,27 +57,7 @@ const MODELS = [
     // Same compat flags the old pi-clinepass catalog applied to every model
     // (official DeepSeek behavior: no developer role, Anthropic-style cache
     // markers, no long-retention cache) plus the in-history flag from
-    // dsh-clinepass 0.12.3 — carried by both models, the 1017 snapshot too.
-    compat: {
-      supportsDeveloperRole: false,
-      cacheControlFormat: "anthropic" as const,
-      supportsLongCacheRetention: false,
-      supportsMidConvoSystemMessages: true,
-    },
-  },
-  {
-    id: "cline-pass/deepseek-v4.1-flash-1017",
-    name: "DeepSeek V4.1 Flash 1017",
-    reasoning: true,
-    input: ["text", "image"] as ("text" | "image")[],
-    cost: zeroCost,
-    contextWindow: 921_600,
-    maxTokens: 384_000,
-    thinkingLevelMap: HIGH_MAX,
-    // Same compat flags the old pi-clinepass catalog applied to every model
-    // (official DeepSeek behavior: no developer role, Anthropic-style cache
-    // markers, no long-retention cache) plus the in-history flag from
-    // dsh-clinepass 0.12.3 — carried by both models, the 1017 snapshot too.
+    // dsh-clinepass 0.12.3 — carried by the stable alias.
     compat: {
       supportsDeveloperRole: false,
       cacheControlFormat: "anthropic" as const,

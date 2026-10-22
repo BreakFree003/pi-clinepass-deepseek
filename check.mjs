@@ -5,9 +5,9 @@
  * Usage: node check.mjs
  *
  * Read-only. Verifies that the package is referenced by pi's settings, that
- * both models are visible to `pi --list-models`, that an optional 1017
- * models.json pin still targets DeepSeek, and that the observer markers are
- * present in the installed source. Exits non-zero on failure.
+ * the model is visible to `pi --list-models`, that no stale 1017 override
+ * lingers in models.json, and that the observer markers are present in the
+ * installed source. Exits non-zero on failure.
  */
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
@@ -18,8 +18,8 @@ import { fileURLToPath } from "node:url";
 const AGENT = process.env.PI_AGENT_DIR ?? join(homedir(), ".pi/agent");
 const PLUGIN_DIR = dirname(fileURLToPath(import.meta.url));
 const PI = process.env.PI_BIN ?? "pi";
-const ID = "cline-pass/deepseek-v4.1-flash-1017";
 const ALIAS = "cline-pass/deepseek-v4.1-flash";
+const RETIRED = "cline-pass/deepseek-v4.1-flash-1017";
 
 let failed = 0;
 let skipped = 0;
@@ -51,7 +51,7 @@ const installed = packages.find((entry) =>
 check("settings.json references pi-clinepass-deepseek", installed !== undefined, installed);
 check("extension source is present", existsSync(join(PLUGIN_DIR, "src/index.ts")), PLUGIN_DIR);
 
-// 2. pi actually lists both models — only meaningful once a credential exists,
+// 2. pi actually lists the model — only meaningful once a credential exists,
 //    because pi hides providers without one.
 const auth = readJson(join(AGENT, "auth.json"));
 const credential = auth?.clinepass;
@@ -69,31 +69,25 @@ if (!hasCredential) {
   } catch (error) {
     check(`${PI} --list-models runs`, false, String(error.message).slice(0, 120));
   }
-  for (const [id, maxOut] of [[ALIAS, /(131(?:\.\d+)?K|384K)/], [ID, /384K/]]) {
-    const row = listed.split("\n").find((line) => line.includes(id));
-    check(`pi lists ${id.split("/").pop()}`, row !== undefined, row?.trim());
-    if (row) {
-      check(`  …with 921.6K context`, /921\.6K/.test(row), row.trim());
-      check(`  …with a known max-out`, maxOut.test(row), row.trim());
-    }
+  const row = listed.split("\n").find((line) => line.includes(ALIAS));
+  check(`pi lists ${ALIAS.split("/").pop()}`, row !== undefined, row?.trim());
+  if (row) {
+    check(`  …with 921.6K context`, /921\.6K/.test(row), row.trim());
+    check(`  …with a known max-out`, /(131(?:\.\d+)?K|384K)/.test(row), row.trim());
   }
 }
 
-// 3. Optional user config: a 1017 pin must still target deepseek, and the
-//    stable alias should not carry a pin at all.
+// 3. No stale override for the retired 1017 snapshot (dsh-clinepass 0.13.0),
+//    and the stable alias should not carry a pin the gateway ignores anyway.
 const models = readJson(join(AGENT, "models.json"));
 const overrides = models?.providers?.clinepass?.modelOverrides;
 if (overrides === undefined) {
   note("models.json clinepass overrides (none configured)");
 } else {
-  const only = overrides?.[ID]?.samplingParams?.providerOptions?.gateway?.only;
-  if (only === undefined) note("1017 sampling pin (none configured)");
-  else check("1017 sampling pin targets deepseek", Array.isArray(only) && only.length === 1 && only[0] === "deepseek", JSON.stringify(only));
-  const aliasPin = overrides?.[ALIAS]?.samplingParams;
+  check("no stale 1017 model override", overrides[RETIRED] === undefined, overrides[RETIRED] ? JSON.stringify(Object.keys(overrides[RETIRED])) : "");
+  const aliasPin = overrides[ALIAS]?.samplingParams?.providerOptions?.gateway?.only;
   if (aliasPin === undefined) check("stable alias has no sampling pin", true);
-  else note("stable alias has a sampling pin (the gateway ignores it on that route)", JSON.stringify(aliasPin));
-  const maxTokens = overrides?.[ID]?.maxTokens;
-  if (maxTokens !== undefined) check("1017 maxTokens is a positive number", Number.isInteger(maxTokens) && maxTokens > 0, String(maxTokens));
+  else note("stable alias has a sampling pin (the gateway ignores it)", JSON.stringify(aliasPin));
 }
 
 // 4. Marker checks against the installed source (no version pin — the manifest

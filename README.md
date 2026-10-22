@@ -4,9 +4,8 @@ Cline Pass for [pi](https://pi.dev), mirroring what
 [dsh-clinepass](https://github.com/BreakFree003/dsh-clinepass-deepseek) does in DeepSeek
 Harness — minus the billing/price-tracking machinery:
 
-- registers the `clinepass` OpenAI-compatible provider with **two** models:
-  - `cline-pass/deepseek-v4.1-flash` (stable alias)
-  - `cline-pass/deepseek-v4.1-flash-1017` (dated snapshot)
+- registers the `clinepass` OpenAI-compatible provider with one model,
+  `cline-pass/deepseek-v4.1-flash`;
 - **observes** the real upstream provider of every cline-pass request and shows it in the footer
   using the dsh pill's wording: `Provider: deepseek`, `Provider: --` while awaiting a reply, and the
   last saved verdict on session start. An anonymized channel (`openai-compatible-private`,
@@ -14,12 +13,12 @@ Harness — minus the billing/price-tracking machinery:
   warn icon/tooltip;
 - writes counters + the last verdict to `~/.pi/agent/clinepass-status.json`;
 - `/clinepass` reports plan usage (5h / weekly / monthly) from Cline's billing API;
-- **never rewrites a request.** Pinning stays in your own config (see
-  [Pinning the 1017 snapshot](#pinning-the-1017-snapshot)).
+- **never rewrites a request.** The gateway ignores client-side pinning on `cline-pass/*` since
+  2026-10-22 (dsh-clinepass 0.13.0 dropped its gate patch), so there is nothing to configure.
 
-**Synced with dsh-clinepass v0.12.7.** The two repos are behavior mirrors: whenever one side ships a
-version, the other ports the same behavior and updates its marker (see [Sync](#sync)). Both models
-here and in dsh-clinepass now declare 384,000 max output.
+**Synced with dsh-clinepass v0.13.0.** The two repos are behavior mirrors: whenever one side ships a
+version, the other ports the same behavior and updates its marker (see [Sync](#sync)). The model
+here and in dsh-clinepass now declares 384,000 max output.
 
 > Renamed from `pi-clinepass-dsh`; old GitHub URLs redirect. Package name is now
 > `pi-clinepass-deepseek`.
@@ -30,14 +29,14 @@ here and in dsh-clinepass now declare 384,000 max output.
 pi install git:github.com/BreakFree003/pi-clinepass-deepseek
 
 # pin a release instead of tracking main:
-pi install git:github.com/BreakFree003/pi-clinepass-deepseek@v0.1.11
+pi install git:github.com/BreakFree003/pi-clinepass-deepseek@v0.1.12
 
 # from a local clone, for development:
 pi install .
 ```
 
 Restart pi if it was already running. Then log in (see [Auth](#auth)): pi hides providers without a
-credential, so the two models only appear in `pi --list-models` / the model picker after that.
+credential, so the model only appears in `pi --list-models` / the model picker after that.
 
 ## Auth
 
@@ -53,16 +52,15 @@ token there).
 The credential is a static Cline API key: the extension gives it a 10-year expiry and `refreshToken`
 cannot mint a new one. If it ever expires, run `/login` again.
 
-After login, `pi --list-models | grep clinepass` should list both models.
+After login, `pi --list-models | grep clinepass` should list the model.
 
 ## Models
 
 | Model id | Context | Max output | Thinking |
 | --- | --- | --- | --- |
 | `cline-pass/deepseek-v4.1-flash` | 921,600 | 384,000 | `high` / `max` |
-| `cline-pass/deepseek-v4.1-flash-1017` | 921,600 | 384,000 | `high` / `max` |
 
-Costs are declared as zero: Cline Pass is a subscription, not per-token billing. Both models declare
+Costs are declared as zero: Cline Pass is a subscription, not per-token billing. The model declares
 384,000 max output. This is a client-side budget, not a gateway limit: the Cline gateway does not
 validate `max_tokens` (dsh-clinepass tested 200K/400K and got 200s), so it does not make the model
 generate longer replies — it only stops pi from cutting a long one off.
@@ -74,39 +72,13 @@ generate longer replies — it only stops pi from cutting a long one off.
 | `/clinepass` | plan name/status, 5-hour / Weekly / Monthly bars as **% left** (dsh card wording), period end, last upstream |
 | `/clinepass status` | observer counters (`verified/seen`, `unknown`), last verdict, status-file path |
 
-## Pinning the 1017 snapshot
-
-The 1017 snapshot is the one the gateway lets you pin; the stable alias is routed server-side. Keep
-the pin in your own `~/.pi/agent/models.json` — this extension does not touch requests:
-
-```json
-{
-  "providers": {
-    "clinepass": {
-      "modelOverrides": {
-        "cline-pass/deepseek-v4.1-flash-1017": {
-          "samplingParams": {
-            "providerOptions": {
-              "gateway": { "only": ["deepseek"], "allow_fallbacks": false }
-            }
-          }
-        }
-      }
-    }
-  }
-}
-```
-
-Do not add a `samplingParams` pin to the stable alias: that route ignores client-side pinning and the
-gateway decides where it lands.
-
 ## Files
 
 | Path | Meaning |
 | --- | --- |
 | `~/.pi/agent/clinepass-status.json` | observer state (best-effort; never blocks the agent loop) |
 | `~/.pi/agent/auth.json` → `clinepass` | credential written by pi's login |
-| `~/.pi/agent/models.json` → `providers.clinepass.modelOverrides` | your pinning / overrides (not touched by this plugin) |
+| `~/.pi/agent/models.json` → `providers.clinepass.modelOverrides` | your overrides (not touched by this plugin) |
 
 ## Sync
 
@@ -117,13 +89,13 @@ update the marker above. When a pi-side change lands first, mirror it back to ds
 before bumping the marker.
 
 The checklist is [RELEASING.md §7](https://github.com/BreakFree003/dsh-clinepass-deepseek/blob/main/RELEASING.md)
-on the dsh side. After every sync: `node check.mjs` green, plus one live request per model.
+on the dsh side. After every sync: `node check.mjs` green, plus one live request.
 
 ## Difference from the old pi-clinepass
 
 No price catalog, no per-turn cost meter, no calibration flow, no Cline CLI/WorkOS device login.
 Models are static here; usage comes straight from the billing API. The old package's model list
-(and its local catalog patch for 1017) is gone — this extension is the only source of the two models.
+(and its local catalog patch for 1017) is gone — this extension is the only source of the model.
 
 ## Check
 
@@ -132,9 +104,9 @@ node check.mjs
 ```
 
 An optional, read-only smoke check for an installed copy: it verifies that `settings.json` references
-this package, that both models are listed by `pi --list-models` with the expected context, that the
-1017 override (if you set one) still pins `deepseek`, and that the observer markers are present in
-the installed source. It reads your `~/.pi/agent` config and never changes it; `pi` must be on
+this package, that the model is listed by `pi --list-models` with the expected context, that no stale
+1017 override lingers in `models.json`, and that the observer markers are present in the installed
+source. It reads your `~/.pi/agent` config and never changes it; `pi` must be on
 `PATH`. Model-list checks are skipped until a clinepass credential exists, so run it again after
 `/login`. There is no automated test suite beyond this check.
 
