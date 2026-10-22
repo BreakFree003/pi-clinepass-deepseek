@@ -5,7 +5,7 @@
  * Usage: node check.mjs
  *
  * Read-only. Verifies that the package is referenced by pi's settings, that
- * the model is visible to `pi --list-models`, that no stale 1017 override
+ * the model is visible to `pi --list-models`, that no stale alias override
  * lingers in models.json, and that the observer markers are present in the
  * installed source. Exits non-zero on failure.
  */
@@ -18,8 +18,8 @@ import { fileURLToPath } from "node:url";
 const AGENT = process.env.PI_AGENT_DIR ?? join(homedir(), ".pi/agent");
 const PLUGIN_DIR = dirname(fileURLToPath(import.meta.url));
 const PI = process.env.PI_BIN ?? "pi";
-const ALIAS = "cline-pass/deepseek-v4.1-flash";
-const RETIRED = "cline-pass/deepseek-v4.1-flash-1017";
+const MODEL = "cline-pass/deepseek-v4.1-flash-1017";
+const RETIRED = "cline-pass/deepseek-v4.1-flash";
 
 let failed = 0;
 let skipped = 0;
@@ -69,25 +69,25 @@ if (!hasCredential) {
   } catch (error) {
     check(`${PI} --list-models runs`, false, String(error.message).slice(0, 120));
   }
-  const row = listed.split("\n").find((line) => line.includes(ALIAS));
-  check(`pi lists ${ALIAS.split("/").pop()}`, row !== undefined, row?.trim());
+  const row = listed.split("\n").find((line) => line.includes(MODEL));
+  check(`pi lists ${MODEL.split("/").pop()}`, row !== undefined, row?.trim());
   if (row) {
     check(`  …with 921.6K context`, /921\.6K/.test(row), row.trim());
     check(`  …with a known max-out`, /(131(?:\.\d+)?K|384K)/.test(row), row.trim());
   }
 }
 
-// 3. No stale override for the retired 1017 snapshot (dsh-clinepass 0.13.0),
-//    and the stable alias should not carry a pin the gateway ignores anyway.
+// 3. No stale override for the retired alias (dsh-clinepass 0.14.0), and the
+//    kept snapshot id should not carry a pin the gateway ignores anyway.
 const models = readJson(join(AGENT, "models.json"));
 const overrides = models?.providers?.clinepass?.modelOverrides;
 if (overrides === undefined) {
   note("models.json clinepass overrides (none configured)");
 } else {
-  check("no stale 1017 model override", overrides[RETIRED] === undefined, overrides[RETIRED] ? JSON.stringify(Object.keys(overrides[RETIRED])) : "");
-  const aliasPin = overrides[ALIAS]?.samplingParams?.providerOptions?.gateway?.only;
-  if (aliasPin === undefined) check("stable alias has no sampling pin", true);
-  else note("stable alias has a sampling pin (the gateway ignores it)", JSON.stringify(aliasPin));
+  check("no stale alias model override", overrides[RETIRED] === undefined, overrides[RETIRED] ? JSON.stringify(Object.keys(overrides[RETIRED])) : "");
+  const pin = overrides[MODEL]?.samplingParams?.providerOptions?.gateway?.only;
+  if (pin === undefined) check("kept model has no sampling pin", true);
+  else note("kept model carries a sampling pin (the gateway ignores it)", JSON.stringify(pin));
 }
 
 // 4. Marker checks against the installed source (no version pin — the manifest

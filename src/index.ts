@@ -2,7 +2,7 @@
  * pi-clinepass-deepseek — Cline Pass for pi, same job as dsh-clinepass:
  *
  *   1. registers the `clinepass` OpenAI-compatible provider with the
- *      `cline-pass/deepseek-v4.1-flash` route;
+ *      `cline-pass/deepseek-v4.1-flash-1017` route;
  *   2. observes which upstream provider actually answered each request, using
  *      dsh's evidence priority (gateway routing → top-level `provider` →
  *      provider_metadata namespace → DeepSeek fingerprint), and shows it in
@@ -46,7 +46,7 @@ const zeroCost = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
 
 const MODELS = [
   {
-    id: "cline-pass/deepseek-v4.1-flash",
+    id: "cline-pass/deepseek-v4.1-flash-1017",
     name: "DeepSeek V4.1 Flash",
     reasoning: true,
     input: ["text", "image"] as ("text" | "image")[],
@@ -57,7 +57,7 @@ const MODELS = [
     // Same compat flags the old pi-clinepass catalog applied to every model
     // (official DeepSeek behavior: no developer role, Anthropic-style cache
     // markers, no long-retention cache) plus the in-history flag from
-    // dsh-clinepass 0.12.3 — carried by the stable alias.
+    // dsh-clinepass 0.12.3 — carried by the kept snapshot id.
     compat: {
       supportsDeveloperRole: false,
       cacheControlFormat: "anthropic" as const,
