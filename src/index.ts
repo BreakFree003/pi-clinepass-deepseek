@@ -11,12 +11,14 @@
  *   3. `/clinepass` reports plan usage (5h / weekly / monthly) from Cline's
  *      billing API, using the token pi already stores for this provider.
  *
- * It never rewrites a request. Pinning is declared on the model, in pi-ai's
- * `compat.vercelGatewayRouting.only` (pi-ai 1.3.0 passes it through as
- * `providerOptions.gateway.only`; no gate patch needed, unlike dsh). As of
- * 2026-10-23 the 1017 snapshot honours `only` again, so the model pins
- * `[deepseek]`; the stable alias and the rest of `cline-pass/*` are still
- * re-pointed to a VMC contributor route by the gateway.
+ * It never rewrites a request body, with one documented exception: it adds the
+ * pin's `providerOptions.gateway` routing fields to cline-pass requests (see
+ * `withGatewayRouting`). Pinning is declared on the model in pi-ai's
+ * `compat.vercelGatewayRouting`, but pi-ai 1.4.0 only knows `only`/`order` —
+ * its schema has no `has` and its openai-completions branch copies just those
+ * two into `providerOptions.gateway`. Since 2026-10-30 the gateway only leaves
+ * its private/VMC route when `gateway.has` is present, so `only` alone is
+ * inert; the hook tops the payload up. Nothing else in the body is touched.
  *
  * Auth: `/login` → Cline Pass accepts either the `CLINE_PASS_API_KEY`
  * environment variable or a pasted API key; both are stored by pi as the
@@ -47,6 +49,15 @@ const HIGH_MAX = {
 
 const zeroCost = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
 
+/**
+ * Routing pin (2026-10-30): `has` is the switch that moves a request off the
+ * private/VMC route, `only` then narrows the public candidates to the
+ * first-party DeepSeek channel. pi-ai 1.4.0 emits `only` from the model's
+ * compat block but drops `has`, so the hook below applies both on the payload.
+ */
+const GATEWAY_ONLY = ["deepseek"] as const;
+const GATEWAY_HAS = ["vision", "implicit-caching"] as const;
+
 const MODELS = [
   {
     id: "cline-pass/deepseek-v4.1-flash-1017",
@@ -66,10 +77,11 @@ const MODELS = [
       cacheControlFormat: "anthropic" as const,
       supportsLongCacheRetention: false,
       supportsMidConvoSystemMessages: true,
-      // dsh-clinepass 0.15.0: pin the first-party upstream. The gateway executes
-      // `only` for the 1017 snapshot again (2026-10-23); without it the
-      // weighted tier-0 pick can hand the request to fireworks.
-      vercelGatewayRouting: { only: ["deepseek"] },
+      // dsh-clinepass 0.16.0: pin the first-party upstream. Kept declarative
+      // here (it documents intent and still works with any pi-ai that learns
+      // `has`), but the effective pin is `withGatewayRouting` below — `only`
+      // alone lands on the VMC route.
+      vercelGatewayRouting: { only: [...GATEWAY_ONLY] },
     },
   },
 ];
@@ -296,6 +308,27 @@ function providerLabel(provider: string, anonymized = provider === ANONYMIZED_CH
   return `${anonymized ? "⚠ " : ""}Provider: ${label}`;
 }
 
+/**
+ * Top up the request's gateway routing with the pin's fields.
+ *
+ * pi-ai 1.4.0's `VercelGatewayRoutingSchema` declares only `only`/`order`, and
+ * its openai-completions branch copies exactly those into
+ * `providerOptions.gateway` — `has` never reaches the wire. The gateway's own
+ * switch for leaving the private/VMC route is `has` (2026-10-30 matrix: no
+ * `has` → VMC and `only` is ignored; `only` + `has` → first-party DeepSeek),
+ * so the hook supplies it.
+ *
+ * Idempotent: an existing `has`/`only` (pi-ai's, or a future version that
+ * learns the field) wins. Only `providerOptions.gateway` is touched.
+ */
+function withGatewayRouting(payload: Record<string, unknown>): Record<string, unknown> {
+  const providerOptions = isRecord(payload.providerOptions) ? payload.providerOptions : {};
+  const gateway = isRecord(providerOptions.gateway) ? providerOptions.gateway : {};
+  const only = Array.isArray(gateway.only) && gateway.only.length > 0 ? gateway.only : [...GATEWAY_ONLY];
+  const has = Array.isArray(gateway.has) && gateway.has.length > 0 ? gateway.has : [...GATEWAY_HAS];
+  return { ...payload, providerOptions: { ...providerOptions, gateway: { ...gateway, only, has } } };
+}
+
 export default function (pi: { registerProvider: (name: string, config: unknown) => void; on: (event: string, handler: (...args: unknown[]) => unknown) => void; registerCommand: (name: string, config: { description: string; handler: (args: string, ctx: any) => Promise<void> }) => void }) {
   pi.registerProvider(PROVIDER, {
     name: "Cline Pass",
@@ -340,7 +373,10 @@ export default function (pi: { registerProvider: (name: string, config: unknown)
     ctx?.ui?.setStatus?.("clinepass", "Provider: --");
     pendingModel = model;
     resetEvidence();
-    return undefined;
+    // Runs after pi-ai assembled the body (compat included), just before the
+    // HTTP call — the only seam that can add `gateway.has` without patching
+    // pi-ai itself.
+    return payload ? withGatewayRouting(payload) : undefined;
   });
 
   pi.on("provider_stream_event", (...args: unknown[]) => {

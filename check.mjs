@@ -99,6 +99,7 @@ check("footer uses the dsh wording", source.includes('"Provider: --"') && source
 check("session start restores the saved verdict", source.includes("session_start") && source.includes("savedVerdict"));
 check("usage renders % left and reset countdown", source.includes("% left") && source.includes("resets in"));
 check("thinking levels are high/max only", source.includes("HIGH_MAX") && !source.includes("MAX_HIGH_LOW"));
+check("gateway pin carries `has` (the VMC switch)", source.includes("GATEWAY_HAS") && source.includes("withGatewayRouting") && source.includes("providerOptions"));
 
 const manifest = readJson(join(PLUGIN_DIR, "package.json"));
 check("package version is semver", typeof manifest?.version === "string" && /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(manifest.version), manifest?.version);
