@@ -100,6 +100,8 @@ check("session start restores the saved verdict", source.includes("session_start
 check("usage renders % left and reset countdown", source.includes("% left") && source.includes("resets in"));
 check("thinking levels are high/max only", source.includes("HIGH_MAX") && !source.includes("MAX_HIGH_LOW"));
 check("gateway pin carries `has` (the VMC switch)", source.includes("GATEWAY_HAS") && source.includes("withGatewayRouting") && source.includes("providerOptions"));
+check("status records the virtual and upstream models", source.includes("virtualModel") && source.includes("upstreamModel") && source.includes("canonicalSlug"));
+check("no degraded-pool judgement (dsh-clinepass 0.17.1)", !source.includes("degraded") && !source.includes("DEGRADED"));
 
 const manifest = readJson(join(PLUGIN_DIR, "package.json"));
 check("package version is semver", typeof manifest?.version === "string" && /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(manifest.version), manifest?.version);

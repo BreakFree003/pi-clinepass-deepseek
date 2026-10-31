@@ -22,12 +22,18 @@ Harness — minus the billing/price-tracking machinery:
   recipe pinned nothing. The hook adds `has: [vision, implicit-caching]` (and `only` when absent) to
   cline-pass requests and touches nothing else.
 
-**Synced with dsh-clinepass v0.16.0.** The two repos are behavior mirrors: whenever one side ships a
+**Synced with dsh-clinepass v0.17.1.** The two repos are behavior mirrors: whenever one side ships a
 version, the other ports the same behavior and updates its marker (see [Sync](#sync)). Both sides
 now send `gateway.only: [deepseek]` **and** `gateway.has: [vision, implicit-caching]` for the 1017
 snapshot — dsh by patching pi-ai's boot gate/schema/wire, pi by filling the field in its request
 hook, so neither relies on `only` alone. The model here and in dsh-clinepass declares 384,000 max
 output.
+
+0.1.16 (dsh-clinepass 0.17.1) is **no behavior change** in the footer: the status file now records
+`virtualModel` (the echoed model, i.e. the alias's virtual model name) and `upstreamModel`
+(`routing.canonicalSlug`, the model id the gateway actually executed) instead of `responseModel`,
+and the degraded-pool judgement never existed on this side. As in dsh, the echoed name is not the
+serving provider — `cline-pass/…` always echoes the VMC virtual model, pinned or not.
 
 > Renamed from `pi-clinepass-dsh`; old GitHub URLs redirect. Package name is now
 > `pi-clinepass-deepseek`.
@@ -87,7 +93,7 @@ generate longer replies — it only stops pi from cutting a long one off.
 
 | Path | Meaning |
 | --- | --- |
-| `~/.pi/agent/clinepass-status.json` | observer state (best-effort; never blocks the agent loop) |
+| `~/.pi/agent/clinepass-status.json` | observer state (best-effort; never blocks the agent loop); `lastVerified` carries `provider`, `model`, `virtualModel`, `upstreamModel`, `systemFingerprint`, `anonymized` |
 | `~/.pi/agent/auth.json` → `clinepass` | credential written by pi's login |
 | `~/.pi/agent/models.json` → `providers.clinepass.modelOverrides` | your overrides (not touched by this plugin) |
 

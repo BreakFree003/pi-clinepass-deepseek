@@ -94,7 +94,7 @@ let lastVerified: Record<string, unknown> | undefined;
 let pendingModel: string | undefined;
 
 /** Provider evidence collected for the in-flight request, in dsh's priority order. */
-type RoutingEvidence = { direct?: string; attempts: string[] };
+type RoutingEvidence = { direct?: string; attempts: string[]; canonicalSlug?: string };
 const routingEvidence: RoutingEvidence[] = [];
 let topProvider: string | undefined;
 const providerNamespaces: string[] = [];
@@ -105,7 +105,10 @@ let warnedAnonymized = false;
 
 /** The gateway hides the real channel under this label (contributor tier). */
 const ANONYMIZED_CHANNEL = "openai-compatible-private";
+/** The echoed model: the alias's virtual model name, not the serving provider. */
 let lastResponseModel: string | undefined;
+/** `routing.canonicalSlug`: the model id the gateway actually executed. */
+let lastUpstreamModel: string | undefined;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -213,7 +216,7 @@ function summarizeRouting(value: unknown): RoutingEvidence | undefined {
     }
   }
   if (!direct && attempts.length === 0) return undefined;
-  return { direct, attempts };
+  return { direct, attempts, canonicalSlug: stringValue(value.canonicalSlug) };
 }
 
 /**
@@ -274,7 +277,14 @@ function readChunk(data: unknown): ChunkEvidence {
 /** Keep the latest routing verdicts; identical consecutive frames add nothing. */
 function pushRouting(next: RoutingEvidence): void {
   const last = routingEvidence[routingEvidence.length - 1];
-  if (last && last.direct === next.direct && last.attempts.join("\u0000") === next.attempts.join("\u0000")) return;
+  if (
+    last &&
+    last.direct === next.direct &&
+    last.canonicalSlug === next.canonicalSlug &&
+    last.attempts.join("\u0000") === next.attempts.join("\u0000")
+  ) {
+    return;
+  }
   routingEvidence.push(next);
   if (routingEvidence.length > 64) routingEvidence.shift();
 }
@@ -286,6 +296,7 @@ function resetEvidence(): void {
   fingerprintProvider = undefined;
   currentUpstream = undefined;
   lastResponseModel = undefined;
+  lastUpstreamModel = undefined;
 }
 
 /**
@@ -385,6 +396,7 @@ export default function (pi: { registerProvider: (name: string, config: unknown)
     if (event?.provider !== PROVIDER) return;
     const seen = readChunk(event.data);
     if (seen.model) lastResponseModel = seen.model;
+    if (seen.routing?.canonicalSlug) lastUpstreamModel = seen.routing.canonicalSlug;
     if (seen.fingerprint) fingerprintProvider = seen.fingerprint;
     if (seen.topProvider && !topProvider) topProvider = seen.topProvider;
     if (seen.routing) pushRouting(seen.routing);
@@ -426,7 +438,8 @@ export default function (pi: { registerProvider: (name: string, config: unknown)
         at: new Date().toISOString(),
         provider: resolved,
         model,
-        responseModel: lastResponseModel,
+        virtualModel: lastResponseModel,
+        upstreamModel: lastUpstreamModel,
         systemFingerprint: fingerprintProvider,
         anonymized,
       };
