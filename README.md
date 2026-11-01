@@ -2,7 +2,9 @@
 
 Cline Pass for [pi](https://pi.dev), mirroring what
 [dsh-clinepass](https://github.com/BreakFree003/dsh-clinepass-deepseek) does in DeepSeek
-Harness — minus the billing/price-tracking machinery:
+Harness — including the DeepSeek official-price total next to the provider, with one difference:
+here it is footer-only. Nothing is written to disk and the total resets with the session, so there is
+no history and no cross-session figure (dsh keeps both via its conversation projection).
 
 - registers the `clinepass` OpenAI-compatible provider with one model,
   `cline-pass/deepseek-v4.1-flash-1017` (display name `DeepSeek V4.1 Flash`);
@@ -11,6 +13,9 @@ Harness — minus the billing/price-tracking machinery:
   last saved verdict on session start. An anonymized channel (`openai-compatible-private`,
   contributor tier) gets a `⚠` prefix plus a one-shot warning — the same signal as the dsh pill's
   warn icon/tooltip;
+- appends the session's running **official list price** to that same footer slot —
+  `Provider: deepseek · ¥5.09` — priced per request at the moment it ran, with the dsh price table
+  and peak/off-peak rule (see [Footer price](#footer-price-official-list-price));
 - writes counters + the last verdict to `~/.pi/agent/clinepass-status.json`;
 - `/clinepass` reports plan usage (5h / weekly / monthly) from Cline's billing API;
 - **never rewrites a request body, with one documented exception:** the routing pin. Pinning is
@@ -22,17 +27,28 @@ Harness — minus the billing/price-tracking machinery:
   recipe pinned nothing. The hook adds `has: [vision, implicit-caching]` (and `only` when absent) to
   cline-pass requests and touches nothing else.
 
-**Synced with dsh-clinepass v0.18.0.** The two repos are behavior mirrors: whenever one side ships a
-version, the other ports the same behavior and updates its marker (see [Sync](#sync)). Both sides
+**Synced with dsh-clinepass v0.18.1.** The two repos are behavior mirrors: whenever one side ships a
+version, the other ports the same behavior and updates its marker (see [Sync](#sync)). Since 0.1.18
+the footer also carries the official list price, using dsh-clinepass's price table and peak rule. Both sides
 now send `gateway.only: [deepseek]` **and** `gateway.has: [vision, implicit-caching]` for the 1017
 snapshot — dsh by patching pi-ai's boot gate/schema/wire, pi by filling the field in its request
 hook, so neither relies on `only` alone. The model here and in dsh-clinepass declares 384,000 max
 output.
 
+0.1.18 (dsh-clinepass 0.18.0) ports dsh's list-price display to the footer: the same price table
+(¥0.04/M cache read, ¥2.00/M miss **and** cache write, ¥8.00/M output, off-peak × 0.5), the same
+Beijing-time peak windows (Mon–Fri 09:00–12:00 / 14:00–18:00, no holiday exceptions), the same
+per-request peak/off-peak decision and the same magnitude-based `¥` formatting. What does not come
+across is the projection: pi has no conversation log to rebuild spend from, so the total is a
+module-level sum of `message_end` usages — cleared on `session_start`, never persisted, no
+cross-session or sub-agent grouping. `/clinepass` now prints
+`list-price: ¥x.xx (peak ¥… · off-peak ¥…)`.
+
 0.1.17 (dsh-clinepass 0.18.0) is **no behavior change** here: dsh 0.18.0 adds per-conversation list
 pricing (a `clinepassCost` session projection, the ¥ amount on the Provider pill and a resettable
-total on the settings card). Both are dsh-only surfaces — pi has no equivalent conversation chrome,
-so the model list, `compat` flags, the fetch hook and the status-file fields are untouched.
+total on the settings card). At the time both were dsh-only surfaces — pi has no equivalent
+conversation chrome — so the model list, `compat` flags, the fetch hook and the status-file fields
+were untouched; 0.1.18 ports the price display, the projection stays dsh-only.
 
 0.1.16 (dsh-clinepass 0.17.1) is **no behavior change** in the footer: the status file now records
 `virtualModel` (the echoed model, i.e. the alias's virtual model name) and `upstreamModel`
@@ -82,17 +98,39 @@ After login, `pi --list-models | grep clinepass` should list the model.
 
 The id ends in `-1017` because it is Cline's dated snapshot (the one the gateway historically let you
 pin); the display name is `DeepSeek V4.1 Flash`, matching dsh-clinepass 0.16.0. Costs are declared as
-zero: Cline Pass is a subscription, not per-token billing. The model declares
-384,000 max output. This is a client-side budget, not a gateway limit: the Cline gateway does not
-validate `max_tokens` (dsh-clinepass tested 200K/400K and got 200s), so it does not make the model
-generate longer replies — it only stops pi from cutting a long one off.
+zero in the model entry: Cline Pass is a subscription, not per-token billing. The footer's `¥` total
+is the **official** DeepSeek list price layered on top of that zero (see
+[Footer price](#footer-price-official-list-price)), and it never touches pi's own cost accounting. The
+model declares 384,000 max output. This is a client-side budget, not a gateway limit: the Cline
+gateway does not validate `max_tokens` (dsh-clinepass tested 200K/400K and got 200s), so it does not
+make the model generate longer replies — it only stops pi from cutting a long one off.
 
 ## Commands
 
 | Command | What it shows |
 | --- | --- |
-| `/clinepass` | plan name/status, 5-hour / Weekly / Monthly bars as **% left** (dsh card wording), period end, last upstream |
-| `/clinepass status` | observer counters (`verified/seen`, `unknown`), last verdict, status-file path |
+| `/clinepass` | plan name/status, 5-hour / Weekly / Monthly bars as **% left** (dsh card wording), period end, session list price, last upstream |
+| `/clinepass status` | observer counters (`verified/seen`, `unknown`), session list price, last verdict, status-file path |
+
+## Footer price (official list price)
+
+`Provider: deepseek · ¥5.09` — the `¥` figure is the session's running DeepSeek **official** list
+price, not Cline Pass quota accounting. Same table and same rule as dsh-clinepass's `cost.js`
+(CNY per million tokens, **peak**): `cacheRead 0.04`, `uncachedInput 2.00`, `output 8.00`;
+`cacheWrite` is charged as an uncached miss (2.00); off-peak is peak × 0.5. Peak = Beijing time
+(UTC+8) **Mon–Fri 09:00–12:00 and 14:00–18:00**; everything else, weekends included, is off-peak.
+No holiday exceptions. The call is judged at the instant it finished, so a session that crosses
+12:00 / 18:00 / Friday evening is priced per request, not per session. The time zone comes from a
+`+8h` shift read with `getUTC*`, so the host's zone never changes the answer.
+
+Only requests whose model id matches `/deepseek-v4\.1-flash/i` are priced; a `deepseek-v4-pro` on
+the same route has no price list here, and billing it at flash rates would understate it, so it is
+skipped. `cacheWrite1h` is not added on top of `cacheWrite` (it is a detail of that bucket, and the
+four pi counters are disjoint). Display hides the amount entirely while the total is zero, and
+formats like the dsh pill: `¥5.09`, `¥0.156`, `¥0.0012`.
+
+The total is memory-only: module-level, reset on `session_start`, never written to
+`clinepass-status.json`, no cross-session figure. Restarting pi starts from zero.
 
 ## Files
 
@@ -115,9 +153,10 @@ on the dsh side. After every sync: `node check.mjs` green, plus one live request
 
 ## Difference from the old pi-clinepass
 
-No price catalog, no per-turn cost meter, no calibration flow, no Cline CLI/WorkOS device login.
-Models are static here; usage comes straight from the billing API. The old package's model list
-(and its local catalog patch for 1017) is gone — this extension is the only source of the model.
+No price catalog of its own beyond the official list-price table above, no per-turn cost meter, no
+calibration flow, no Cline CLI/WorkOS device login. Models are static here; usage comes straight
+from the billing API. The old package's model list (and its local catalog patch for 1017) is gone —
+this extension is the only source of the model.
 
 ## Check
 
@@ -127,10 +166,16 @@ node check.mjs
 
 An optional, read-only smoke check for an installed copy: it verifies that `settings.json` references
 this package, that the model is listed by `pi --list-models` with the expected context, that no stale
-alias override lingers in `models.json`, and that the observer markers are present in the installed
-source. It reads your `~/.pi/agent` config and never changes it; `pi` must be on
-`PATH`. Model-list checks are skipped until a clinepass credential exists, so run it again after
-`/login`. There is no automated test suite beyond this check.
+alias override lingers in `models.json`, and that the observer/pricing markers are present in the
+installed source. It reads your `~/.pi/agent` config and never changes it; `pi` must be on `PATH`.
+Model-list checks are skipped until a clinepass credential exists, so run it again after `/login`.
+
+The last section imports the source's exported pricing helpers (`isPeak`, `costOfUsage`,
+`formatCny`, `isPricedModel`, `addUsage`, `statusText`) at fixed timestamps and drives the real hooks
+with a fake `pi` object, so the formula, the peak/off-peak boundaries, the model gate, missing
+`usage` and the footer string are all asserted, not eyeballed. Importing TypeScript needs
+**Node ≥ 22.18**; on older runtimes that one section is skipped (`skip` line) and everything else
+still runs. A throwaway `HOME` keeps the faked hooks' status-file writes out of `~/.pi/agent`.
 
 ## Security and limits
 

@@ -9,7 +9,11 @@
  *      the footer; counters + last verdict go to
  *      `~/.pi/agent/clinepass-status.json`;
  *   3. `/clinepass` reports plan usage (5h / weekly / monthly) from Cline's
- *      billing API, using the token pi already stores for this provider.
+ *      billing API, using the token pi already stores for this provider;
+ *   4. prices every finished reply at DeepSeek's official list price (CNY,
+ *      peak/off-peak judged per request in Beijing time) and appends the
+ *      session total to the footer label. The total is module-level: it resets
+ *      on `session_start` and is never persisted — dsh keeps the projection.
  *
  * It never rewrites a request body, with one documented exception: it adds the
  * pin's `providerOptions.gateway` routing fields to cline-pass requests (see
@@ -85,6 +89,145 @@ const MODELS = [
     },
   },
 ];
+
+// ── list pricing (DeepSeek official, CNY, peak/off-peak) ────────────────────
+
+/**
+ * Price list — CNY per million tokens, **peak** hour. Same numbers and same
+ * bookkeeping as dsh-clinepass `cost.js`: the official USD table converted at
+ * 1 USD = 6.6667 CNY (cache hit $0.006 → ¥0.04, miss $0.30 → ¥2.00, output
+ * $1.20 → ¥8.00), cache writes billed as misses, off-peak = peak × 0.5.
+ *
+ * Priced per request at the instant it ran: one conversation can cross 12:00 /
+ * 18:00 or the weekend, so neither the session start nor "now" is usable.
+ */
+const PRICING = { version: "2026-11-02", cacheRead: 0.04, cacheMiss: 2, output: 8, offPeakFactor: 0.5 } as const;
+
+/** Peak windows as Beijing-time weekday minutes, `[from, to)`. */
+const PEAK_WINDOWS = [
+  [9 * 60, 12 * 60],
+  [14 * 60, 18 * 60],
+] as const;
+
+/** Beijing = UTC+8. Peak detection shifts the timestamp, never the host zone. */
+const TZ_OFFSET_MS = 8 * 60 * 60 * 1000;
+
+/**
+ * Is `atMs` inside a peak window? Shift to UTC+8 and read `getUTC*`, so the
+ * answer never depends on the host time zone. Weekends are off-peak, and public
+ * holidays are not special-cased — the rule dsh-clinepass already uses.
+ */
+export function isPeak(atMs: number): boolean {
+  if (typeof atMs !== "number" || !Number.isFinite(atMs)) return false;
+  const shifted = new Date(atMs + TZ_OFFSET_MS);
+  const day = shifted.getUTCDay();
+  if (day === 0 || day === 6) return false;
+  const minutes = shifted.getUTCHours() * 60 + shifted.getUTCMinutes();
+  return PEAK_WINDOWS.some(([from, to]) => minutes >= from && minutes < to);
+}
+
+/** Non-negative whole token count; anything unusable reads as zero. */
+function tokenCount(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.floor(value) : 0;
+}
+
+/**
+ * pi's `Usage` reduced to billed buckets. The four counters are disjoint (pi's
+ * own `usage-totals` adds input + output + cacheRead + cacheWrite), and
+ * `cacheWrite` is charged as a miss because the official table has no separate
+ * cache-write price. `cacheWrite1h` is deliberately not added again: it is a
+ * detail of `cacheWrite`, not a fifth bucket.
+ */
+function bucketsOfUsage(usage: unknown): { cacheRead: number; uncachedInput: number; cacheWrite: number; output: number } {
+  const record = isRecord(usage) ? usage : {};
+  return {
+    cacheRead: tokenCount(record.cacheRead),
+    uncachedInput: tokenCount(record.input),
+    cacheWrite: tokenCount(record.cacheWrite),
+    output: tokenCount(record.output),
+  };
+}
+
+/**
+ * One usage record priced at `atMs`, in CNY. Missing or partial usage is not an
+ * error — it simply costs nothing (or only the buckets it does carry).
+ */
+export function costOfUsage(usage: unknown, atMs: number): number {
+  const buckets = bucketsOfUsage(usage);
+  const miss = buckets.uncachedInput + buckets.cacheWrite;
+  const peakCost = (buckets.cacheRead * PRICING.cacheRead + miss * PRICING.cacheMiss + buckets.output * PRICING.output) / 1e6;
+  return peakCost * (isPeak(atMs) ? 1 : PRICING.offPeakFactor);
+}
+
+/**
+ * The price list only covers the flash snapshot. A `deepseek-v4-pro` on the
+ * same route costs 3–7× the flash rates, so billing it as flash would understate
+ * it — skip it instead of showing a wrong number (dsh `isPricedModel`).
+ */
+export function isPricedModel(model: unknown): boolean {
+  return typeof model === "string" && /deepseek-v4\.1-flash/i.test(model);
+}
+
+/**
+ * `¥` + magnitude-dependent digits, matching the dsh pill: 2 at ≥ ¥1, 3 inside
+ * [0.01, 1), 4 below that; a positive value that would round to zero shows the
+ * smallest non-zero unit rather than a lying `¥0.0000`. Zero reads `¥0.00`.
+ */
+export function formatCny(value: number): string {
+  const amount = Number.isFinite(value) && value > 0 ? value : 0;
+  if (amount === 0) return "¥0.00";
+  const digits = amount < 0.01 ? 4 : amount < 1 ? 3 : 2;
+  const text = amount.toFixed(digits);
+  if (Number(text) === 0) return `¥${(1 / 10 ** digits).toFixed(digits)}`;
+  return `¥${text}`;
+}
+
+/**
+ * Session-scoped spend. Unlike dsh there is no projection and no persistence:
+ * pi exposes no conversation log to rebuild it from, so this is just the sum of
+ * the `message_end` usages this process has seen, cleared on `session_start`.
+ */
+type Spend = { total: number; peak: number; offPeak: number; requests: number };
+const spend: Spend = { total: 0, peak: 0, offPeak: 0, requests: 0 };
+
+/** Snapshot of the running total (peak / off-peak buckets included, for `/clinepass`). */
+export function currentSpend(): Readonly<Spend> {
+  return { ...spend };
+}
+
+/** Forget the session total — called on `session_start`, the only reset point. */
+export function resetSpend(): void {
+  spend.total = 0;
+  spend.peak = 0;
+  spend.offPeak = 0;
+  spend.requests = 0;
+}
+
+/**
+ * Fold one usage record into the session total and return the amount added.
+ * Calls that carry no billable tokens are not counted at all, so a footer fed
+ * only by free/unknown calls still shows nothing.
+ */
+export function addUsage(usage: unknown, atMs: number): number {
+  const amount = costOfUsage(usage, atMs);
+  if (!(amount > 0)) return 0;
+  spend.total += amount;
+  if (isPeak(atMs)) spend.peak += amount;
+  else spend.offPeak += amount;
+  spend.requests += 1;
+  return amount;
+}
+
+/** ` · ¥5.09`, or `""` while nothing has been priced — a fresh footer stays clean. */
+export function costSuffix(): string {
+  return spend.total > 0 ? ` · ${formatCny(spend.total)}` : "";
+}
+
+/** One-line session total for `/clinepass`: `list-price: ¥5.09 (peak ¥… · off-peak ¥…)`. */
+function listPriceLine(): string {
+  const spent = currentSpend();
+  return `list-price: ${formatCny(spent.total)} (peak ${formatCny(spent.peak)} · off-peak ${formatCny(spent.offPeak)})`;
+}
 
 // ── state ───────────────────────────────────────────────────────────────────
 
@@ -320,6 +463,15 @@ function providerLabel(provider: string, anonymized = provider === ANONYMIZED_CH
 }
 
 /**
+ * The one footer string: provider label + running official-price total. Every
+ * `setStatus("clinepass", …)` goes through here, `Provider: --` included, so the
+ * amount never blinks out for a request.
+ */
+export function statusText(provider: string, anonymized = provider === ANONYMIZED_CHANNEL): string {
+  return providerLabel(provider, anonymized) + costSuffix();
+}
+
+/**
  * Top up the request's gateway routing with the pin's fields.
  *
  * pi-ai 1.4.0's `VercelGatewayRoutingSchema` declares only `only`/`order`, and
@@ -370,9 +522,12 @@ export default function (pi: { registerProvider: (name: string, config: unknown)
 
   pi.on("session_start", (...args: unknown[]) => {
     const ctx = args[1] as { model?: { id?: string }; ui?: { setStatus?: (key: string, text: string | undefined) => void } } | undefined;
+    // A new session starts at zero: pi has no log to replay, so this is the
+    // only reset point (and it runs even when the session is not on our route).
+    resetSpend();
     if (typeof ctx?.model?.id !== "string" || !ctx.model.id.startsWith("cline-pass/")) return;
     const saved = savedVerdict();
-    ctx.ui?.setStatus?.("clinepass", saved ? providerLabel(saved.provider, saved.anonymized) : "Provider: --");
+    ctx.ui?.setStatus?.("clinepass", saved ? statusText(saved.provider, saved.anonymized) : statusText("--"));
   });
 
   pi.on("before_provider_request", (...args: unknown[]) => {
@@ -381,7 +536,8 @@ export default function (pi: { registerProvider: (name: string, config: unknown)
     const model = stringValue(payload?.model);
     if (!model?.startsWith("cline-pass/")) return;
     const ctx = args[1] as { ui?: { setStatus?: (key: string, text: string | undefined) => void } } | undefined;
-    ctx?.ui?.setStatus?.("clinepass", "Provider: --");
+    // Keeps the running amount visible while the provider is still unknown.
+    ctx?.ui?.setStatus?.("clinepass", statusText("--"));
     pendingModel = model;
     resetEvidence();
     // Runs after pi-ai assembled the body (compat included), just before the
@@ -407,7 +563,7 @@ export default function (pi: { registerProvider: (name: string, config: unknown)
     const resolved = resolveUpstream();
     if (resolved && resolved !== currentUpstream) {
       currentUpstream = resolved;
-      ctx?.ui?.setStatus?.("clinepass", providerLabel(resolved));
+      ctx?.ui?.setStatus?.("clinepass", statusText(resolved));
       // Same warning the dsh pill carries in its tooltip: one alert per process,
       // because every subsequent reply would repeat it.
       if (resolved === ANONYMIZED_CHANNEL && !warnedAnonymized) {
@@ -422,12 +578,16 @@ export default function (pi: { registerProvider: (name: string, config: unknown)
   });
 
   pi.on("message_end", (...args: unknown[]) => {
-    const event = args[0] as { message?: { provider?: string; model?: string } };
+    const event = args[0] as { message?: { provider?: string; model?: string; usage?: unknown } };
     const ctx = args[1] as { hasUI?: boolean; ui?: { setStatus?: (key: string, text: string | undefined) => void } } | undefined;
     if (event?.message?.provider !== PROVIDER) return;
     counters.seen += 1;
     const resolved = currentUpstream ?? resolveUpstream();
     const model = pendingModel ?? event.message.model;
+    // Price the turn at the instant it finished — but only when the request went
+    // to the flash snapshot; v4-pro has no price list here (see isPricedModel).
+    // Reading `usage` is the only thing this hook does with the message.
+    if (isPricedModel(model)) addUsage(event.message.usage, Date.now());
     pendingModel = undefined;
     if (resolved) {
       counters.verified += 1;
@@ -445,9 +605,11 @@ export default function (pi: { registerProvider: (name: string, config: unknown)
       };
     } else {
       counters.unknown += 1;
-      if (ctx?.hasUI) ctx.ui?.setStatus?.("clinepass", "Provider: --");
     }
     writeStatus();
+    // Re-render after the sum grew: the streaming update during the request
+    // predates this usage, so without this the amount lags one turn behind.
+    if (ctx?.hasUI) ctx.ui?.setStatus?.("clinepass", statusText(resolved ?? "--"));
     return undefined;
   });
 
@@ -457,6 +619,7 @@ export default function (pi: { registerProvider: (name: string, config: unknown)
       const lines: string[] = [];
       if ((args || "").trim() === "status") {
         lines.push(`observer: ${counters.verified}/${counters.seen} verified, ${counters.anonymized} anonymized, ${counters.unknown} unknown`);
+        lines.push(listPriceLine());
         lines.push(`last upstream: ${lastUpstream ?? savedVerdict()?.provider ?? "(none)"}`);
         if (lastVerified) lines.push(`last: ${JSON.stringify(lastVerified)}`);
         lines.push(`status file: ${STATUS_FILE}`);
@@ -526,6 +689,7 @@ export default function (pi: { registerProvider: (name: string, config: unknown)
         const at = new Date(periodEnd);
         lines.push(`period ends: ${Number.isNaN(at.getTime()) ? periodEnd : at.toISOString()}`);
       }
+      lines.push(listPriceLine());
       lines.push(`last upstream: ${lastUpstream ?? savedVerdict()?.provider ?? "(none)"}`);
       ctx.ui.notify(lines.join("\n"), "info");
     },
