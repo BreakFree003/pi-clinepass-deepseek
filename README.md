@@ -22,12 +22,17 @@ Harness — minus the billing/price-tracking machinery:
   recipe pinned nothing. The hook adds `has: [vision, implicit-caching]` (and `only` when absent) to
   cline-pass requests and touches nothing else.
 
-**Synced with dsh-clinepass v0.17.1.** The two repos are behavior mirrors: whenever one side ships a
+**Synced with dsh-clinepass v0.18.0.** The two repos are behavior mirrors: whenever one side ships a
 version, the other ports the same behavior and updates its marker (see [Sync](#sync)). Both sides
 now send `gateway.only: [deepseek]` **and** `gateway.has: [vision, implicit-caching]` for the 1017
 snapshot — dsh by patching pi-ai's boot gate/schema/wire, pi by filling the field in its request
 hook, so neither relies on `only` alone. The model here and in dsh-clinepass declares 384,000 max
 output.
+
+0.1.17 (dsh-clinepass 0.18.0) is **no behavior change** here: dsh 0.18.0 adds per-conversation list
+pricing (a `clinepassCost` session projection, the ¥ amount on the Provider pill and a resettable
+total on the settings card). Both are dsh-only surfaces — pi has no equivalent conversation chrome,
+so the model list, `compat` flags, the fetch hook and the status-file fields are untouched.
 
 0.1.16 (dsh-clinepass 0.17.1) is **no behavior change** in the footer: the status file now records
 `virtualModel` (the echoed model, i.e. the alias's virtual model name) and `upstreamModel`
