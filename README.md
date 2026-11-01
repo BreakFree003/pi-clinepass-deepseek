@@ -27,13 +27,18 @@ no history and no cross-session figure (dsh keeps both via its conversation proj
   recipe pinned nothing. The hook adds `has: [vision, implicit-caching]` (and `only` when absent) to
   cline-pass requests and touches nothing else.
 
-**Synced with dsh-clinepass v0.18.1.** The two repos are behavior mirrors: whenever one side ships a
+**Synced with dsh-clinepass v0.18.2.** The two repos are behavior mirrors: whenever one side ships a
 version, the other ports the same behavior and updates its marker (see [Sync](#sync)). Since 0.1.18
 the footer also carries the official list price, using dsh-clinepass's price table and peak rule. Both sides
 now send `gateway.only: [deepseek]` **and** `gateway.has: [vision, implicit-caching]` for the 1017
 snapshot — dsh by patching pi-ai's boot gate/schema/wire, pi by filling the field in its request
 hook, so neither relies on `only` alone. The model here and in dsh-clinepass declares 384,000 max
 output.
+
+0.1.19 (dsh-clinepass 0.18.2) is **no behavior change** here: dsh 0.18.1 shipped the peak/off-peak
+contract clarification and a review backlog, dsh 0.18.2 unified the last money format (the settings
+card). None of those surfaces exist in pi — the footer price, model list and `compat` flags are
+unchanged.
 
 0.1.18 (dsh-clinepass 0.18.0) ports dsh's list-price display to the footer: the same price table
 (¥0.04/M cache read, ¥2.00/M miss **and** cache write, ¥8.00/M output, off-peak × 0.5), the same
