@@ -27,13 +27,20 @@ no history and no cross-session figure (dsh keeps both via its conversation proj
   recipe pinned nothing. The hook adds `has: [vision, implicit-caching]` (and `only` when absent) to
   cline-pass requests and touches nothing else.
 
-**Synced with dsh-clinepass v0.18.2.** The two repos are behavior mirrors: whenever one side ships a
+**Synced with dsh-clinepass v0.18.10.** The two repos are behavior mirrors: whenever one side ships a
 version, the other ports the same behavior and updates its marker (see [Sync](#sync)). Since 0.1.18
 the footer also carries the official list price, using dsh-clinepass's price table and peak rule. Both sides
 now send `gateway.only: [deepseek]` **and** `gateway.has: [vision, implicit-caching]` for the 1017
 snapshot — dsh by patching pi-ai's boot gate/schema/wire, pi by filling the field in its request
 hook, so neither relies on `only` alone. The model here and in dsh-clinepass declares 384,000 max
 output.
+
+0.1.20 (dsh-clinepass 0.18.10) is **no behavior change** here: dsh 0.18.3–0.18.10 only rewrote the
+settings-page spend card. Its amount now comes from the gateway billing ledger (`/users/<uid>/usages`,
+summed `costUsd` from the reset baseline), and its monthly percentage is `monthly.percentUsed − the
+value recorded at reset`. Both are dsh settings surfaces. pi has no settings page and no reset baseline:
+the footer keeps the session-scoped official list price, and `/clinepass` keeps reporting the plan's own
+30-day percentages straight from `/usage-limits`.
 
 0.1.19 (dsh-clinepass 0.18.2) is **no behavior change** here: dsh 0.18.1 shipped the peak/off-peak
 contract clarification and a review backlog, dsh 0.18.2 unified the last money format (the settings
